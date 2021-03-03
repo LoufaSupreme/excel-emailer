@@ -1,3 +1,9 @@
+""" program that reads an excel file of recipients and sends them an email via a scheduler function. 
+Be sure to configure the scheduler() and pass_criteria() functions for your base case.
+Also be sure to check that the excel sheet is configured the same way as the example.  Changing cell locations will break it. 
+Currently configured for Gmail, but comments show how to use Outlook on local server as well. 
+"""
+
 import openpyxl # dl pip3 install openpyxl==2.6.2 so that code in Automate the Boring Stuff works
 from random import choice
 import os
@@ -61,7 +67,7 @@ def write_excel(i, e = None):
     wb = openpyxl.load_workbook('testexcelwb.xlsx')
     sheet = wb['Customer_DB']
     if e != None:
-        sheet['E' + str(i)] = e
+        sheet['E' + str(i)] = str(e)
     else:
         sheet['E' + str(i)] = datetime.now()
     wb.save('testexcelwb.xlsx')
@@ -69,22 +75,21 @@ def write_excel(i, e = None):
 
 # send emails
 def send_email(recipients):
+    # Outlook: from_email = "fake@email.com" hardcode it in if using a local server
     from_email = os.environ.get('EMAIL_USER')
+    # Outlook: comment out password and port lines
     password = os.environ.get('EMAIL_PASS')
     port = 587
+    # Outlook: change server to 'smtp.company.local' where company is actual company name
     server = 'smtp.gmail.com'
-    message = MIMEMultipart("alternative")
-    message["From"] = from_email
 
-    # add a pdf attachment
+    # prep a pdf attachment
     with open('DP8405_TDS.pdf', 'rb') as f:
         file_data = f.read()
         file_type = imghdr.what(f.name)
         file_name = f.name
-
     attachedfile = MIMEApplication(file_data, _subtype = "pdf")
     attachedfile.add_header('content-disposition', 'attachment', filename = file_name)
-    message.attach(attachedfile)
     
     # loop through all email recipients in the dict list and send personalized emails to them
     for recipient in recipients:
@@ -95,10 +100,14 @@ def send_email(recipients):
         index = recipient['index']
         html = recipient['html']
 
+        # define and setup email message. Must be inside the for loop
+        message = MIMEMultipart("alternative")
+        message["From"] = from_email
         message["To"] = to_email
         message["Subject"] = f"Adhesive Alternatives for {company}"
         html = html.format(last_name=last_name, first_name=first_name, company=company, to_email=to_email)
         text = html.format(last_name=last_name, first_name=first_name, company=company, to_email=to_email)
+        message.attach(attachedfile)
 
         # Turn these into plain/html MIMEText objects
         part1 = MIMEText(text, "plain")
@@ -110,9 +119,11 @@ def send_email(recipients):
         message.attach(part2)
         print(f"Preparing to send email to {first_name}")
         try:
+            # Outlook: remove port from the following line.  It defaults to the correct one for local servers (25 or 24)
             smtpObj = smtplib.SMTP(server, port)
             smtpObj.ehlo()
             smtpObj.starttls()
+            # Outlook: comment out the login line. Not needed on local network.
             smtpObj.login(from_email, password)
             print("Sending Email...")
             smtpObj.sendmail(from_email, to_email, message.as_string()) #must send msg as.string() when using HTML and plaintext options
@@ -122,9 +133,6 @@ def send_email(recipients):
             print(e)
             write_excel(index, e)
         finally:
-            #must include these del lines so that email "headers" go back to empty. Otherwise they won't update in the loop...
-            del message["Subject"]
-            del message["To"] 
             smtpObj.quit()
 
 def main():
